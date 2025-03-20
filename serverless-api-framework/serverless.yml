@@ -1,0 +1,239 @@
+service: serverless-api-framework
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  memorySize: 256
+  timeout: 10
+  logRetentionInDays: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    API_VERSION: v1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - !GetAtt UsersTable.Arn
+            - !GetAtt ProductsTable.Arn
+  
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!tests/**'
+    - '!docs/**'
+    - '!.github/**'
+
+functions:
+  # User API endpoints
+  getUsers:
+    handler: src/api/users/getUsers.handler
+    events:
+      - http:
+          path: /api/v1/users
+          method: get
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+  
+  getUserById:
+    handler: src/api/users/getUserById.handler
+    events:
+      - http:
+          path: /api/v1/users/{id}
+          method: get
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+  
+  createUser:
+    handler: src/api/users/createUser.handler
+    events:
+      - http:
+          path: /api/v1/users
+          method: post
+          cors: true
+
+  updateUser:
+    handler: src/api/users/updateUser.handler
+    events:
+      - http:
+          path: /api/v1/users/{id}
+          method: put
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+
+  deleteUser:
+    handler: src/api/users/deleteUser.handler
+    events:
+      - http:
+          path: /api/v1/users/{id}
+          method: delete
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+
+  # Product API endpoints
+  getProducts:
+    handler: src/api/products/getProducts.handler
+    events:
+      - http:
+          path: /api/v1/products
+          method: get
+          cors: true
+  
+  getProductById:
+    handler: src/api/products/getProductById.handler
+    events:
+      - http:
+          path: /api/v1/products/{id}
+          method: get
+          cors: true
+  
+  createProduct:
+    handler: src/api/products/createProduct.handler
+    events:
+      - http:
+          path: /api/v1/products
+          method: post
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+
+  updateProduct:
+    handler: src/api/products/updateProduct.handler
+    events:
+      - http:
+          path: /api/v1/products/{id}
+          method: put
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+
+  deleteProduct:
+    handler: src/api/products/deleteProduct.handler
+    events:
+      - http:
+          path: /api/v1/products/{id}
+          method: delete
+          cors: true
+          authorizer: 
+            type: jwt
+            identitySource: $request.header.Authorization
+
+  # Auth functions
+  login:
+    handler: src/api/auth/login.handler
+    events:
+      - http:
+          path: /api/v1/auth/login
+          method: post
+          cors: true
+
+  register:
+    handler: src/api/auth/register.handler
+    events:
+      - http:
+          path: /api/v1/auth/register
+          method: post
+          cors: true
+
+resources:
+  Resources:
+    # DynamoDB Tables
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-users
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: email-index
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        SSESpecification:
+          SSEEnabled: true
+
+    ProductsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-products
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        SSESpecification:
+          SSEEnabled: true
+
+    # API Gateway
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+
+    GatewayResponseDefault5XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+
+plugins:
+  - serverless-offline
+  - serverless-plugin-typescript
+  - serverless-dynamodb-local
+  - serverless-iam-roles-per-function
+
+custom:
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+  dynamodb:
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+    stages:
+      - dev 
