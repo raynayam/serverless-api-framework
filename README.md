@@ -41,7 +41,7 @@ This project uses a modern serverless architecture:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/serverless-api-framework.git
+git clone https://github.com/raynayam/serverless-api-framework.git
 cd serverless-api-framework
 
 # Install dependencies
